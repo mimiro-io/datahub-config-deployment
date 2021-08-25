@@ -30,7 +30,7 @@ Please use the following steps:
 When you submit code changes, your submissions are understood to be under the same [Apache 2.0 License](https://choosealicense.com/licenses/apache-2.0/) that covers the project.
 
 ## Report bugs using Github Issues
-We use GitHub [issues](https://github.com/mimiro-io/datahub/issues) to track public bugs. Report a bug by opening a new issue, but please check to see if this issue has already been reported.
+We use GitHub [issues](https://github.com/mimiro-io/datahub-config-deployment/issues) to track public bugs. Report a bug by opening a new issue, but please check to see if this issue has already been reported.
 
 **Great Bug Reports** tend to have:
 
