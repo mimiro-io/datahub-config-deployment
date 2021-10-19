@@ -128,7 +128,7 @@ func (app *App) loginMimCli() error {
 	args := []string{
 		"mim", "login", "add", "--alias=deploy", fmt.Sprintf("--server=%s", app.Env.MimServer),
 	}
-	utils.LogCommand(args, "default")
+	utils.LogCommand(args, "default", "")
 	if app.Env.Token != "" {
 		args = append(args, fmt.Sprintf("--token=%s", app.Env.Token))
 	}
@@ -202,12 +202,17 @@ func (app *App) doStuff(files []string, variables map[string]interface{}) error 
 			if !exist {
 				jsonId = ""
 			}
+			jsonTitle, exist := jsonContent["title"].(string)
+			if !exist {
+				jsonTitle = ""
+			}
 			contentInstance := config{
 				Path:            relPath,
 				JsonContent:     jsonContent,
 				Digest:          digest,
 				Type:            configType,
 				Id:              jsonId,
+				Title:           jsonTitle,
 				TransformDigest: transformDigest,
 			}
 			fileConfigs[jsonId] = contentInstance
@@ -309,7 +314,7 @@ func (app *App) executeOperations(manifest Manifest) error {
 				args = []string{"mim", "content", "add", "-f", tmpFileName}
 			}
 
-			utils.LogCommand(args, app.Env.LogFormat)
+			utils.LogCommand(args, app.Env.LogFormat, "")
 			cmdOutputs = append(cmdOutputs, strings.Join(args, " "))
 
 			if !app.Env.DryRun {
@@ -341,7 +346,7 @@ func (app *App) executeOperations(manifest Manifest) error {
 					jobCmd = []string{"mim", "job", "add", "-f", tmpFileName}
 				}
 			}
-			utils.LogCommand(jobCmd, app.Env.LogFormat)
+			utils.LogCommand(jobCmd, app.Env.LogFormat, operation.Config.Title)
 			cmdOutputs = append(cmdOutputs, strings.Join(jobCmd, " "))
 
 			executeCmd := exec.Command("/bin/bash", "-c", fmt.Sprintf("%s", strings.Join(jobCmd, " ")))
@@ -381,7 +386,7 @@ func (app *App) executeOperations(manifest Manifest) error {
 				pterm.Warning.Printf("Required dataset not available on datahub. Creating dataset '%s' for job '%s'.\n", sinkDataset, operation.Config.Id)
 				datasetCmd := []string{"mim", "dataset", "create", sinkDataset}
 				createDatasetCmd := exec.Command("/bin/bash", "-c", fmt.Sprintf("%s", strings.Join(datasetCmd, " ")))
-				utils.LogCommand(datasetCmd, app.Env.LogFormat)
+				utils.LogCommand(datasetCmd, app.Env.LogFormat, "")
 				cmdOutputs = append(cmdOutputs, strings.Join(datasetCmd, " "))
 
 				if !app.Env.DryRun {

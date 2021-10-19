@@ -26,6 +26,7 @@ type Manifest struct {
 
 type config struct {
 	Id              string                 `json:"id"`
+	Title           string                 `json:"title"`
 	Path            string                 `json:"path"`
 	Digest          string                 `json:"digest"`
 	Type            string                 `json:"type"`
@@ -87,7 +88,7 @@ func (m *ManifestConfig) getManifestFromDatahub() (*Manifest, error) {
 		"mim", "content", "show", "DatahubConfigManifest", "--json",
 	}
 
-	utils.LogCommand(args, "default")
+	utils.LogCommand(args, "default", "")
 
 	cmdMim := exec.Command("/bin/bash", "-c", fmt.Sprintf("%s", strings.Join(args, " ")))
 	output, err := cmdMim.CombinedOutput()

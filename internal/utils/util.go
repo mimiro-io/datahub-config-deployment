@@ -103,13 +103,22 @@ func ReadJson(rawJson []byte) (map[string]interface{}, error) {
 	return jsonContent, nil
 }
 
-func LogCommand(args []string, logFormat string) {
+func LogCommand(args []string, logFormat string, comment string) {
 	cmd := strings.Join(args, " ")
 	switch logFormat {
 	case "github":
-		pterm.DefaultBasicText.Printf("::warning:: Executing %s\n", cmd)
+		if comment != "" {
+			pterm.DefaultBasicText.Printf("::warning:: Executing %s (%s)\n", cmd, comment)
+		} else {
+			pterm.DefaultBasicText.Printf("::warning:: Executing %s\n", cmd)
+		}
 	default:
-		pterm.Info.Printf(" > Executing %s\n", cmd)
+		if comment != "" {
+			pterm.Info.Printf(" > Executing %s (%s)\n", cmd, comment)
+		} else {
+			pterm.Info.Printf(" > Executing %s\n", cmd)
+		}
+
 	}
 
 }
