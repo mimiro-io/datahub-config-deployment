@@ -304,7 +304,7 @@ func (app *App) executeOperations(manifest Manifest) error {
 		if operation.Config.Type == "content" {
 			var args []string
 			if operation.Action == "delete" {
-				args = []string{"mim", "content", "delete", operation.Config.Id}
+				args = []string{"mim", "content", "delete", operation.Config.Id, "-C=false"}
 			} else {
 				args = []string{"mim", "content", "add", "-f", tmpFileName}
 			}
