@@ -130,7 +130,7 @@ func (app *App) loginMimCli() error {
 	}
 	utils.LogCommand(args, "default", "")
 	if app.Env.Token != "" {
-		args = append(args, fmt.Sprintf("--token=%s", app.Env.Token))
+		args = append(args, fmt.Sprintf("--type token --token=%s", app.Env.Token))
 	}
 
 	cmdMim1 := exec.Command("/bin/bash", "-c", fmt.Sprintf("%s", strings.Join(args, " ")))
