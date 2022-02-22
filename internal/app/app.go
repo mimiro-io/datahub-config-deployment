@@ -54,6 +54,7 @@ func NewApp(cmd *cobra.Command, args []string) (*App, error) {
 	}
 
 	path, _ := cmd.Flags().GetString("path")
+	ignorePath, _ := cmd.Flags().GetStringArray("ignorePath")
 	env, _ := cmd.Flags().GetString("env")
 	err := verifyEnv(path, env)
 	if err != nil {
@@ -70,6 +71,7 @@ func NewApp(cmd *cobra.Command, args []string) (*App, error) {
 		MimServer:               datahub,
 		Token:                   token,
 		RootPath:                path,
+		IgnorePath:              ignorePath,
 		EnvironmentFile:         env,
 		DryRun:                  dryRun,
 		CreateManifestIfMissing: manifest,

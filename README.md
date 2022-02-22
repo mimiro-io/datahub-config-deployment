@@ -113,6 +113,12 @@ If you wish to only add a single object and not a list, you can instead write li
 ```
 If a wildcard is used in the file path, and it matches more than one file, it will automatically add the content as a list.
 
+### Ignore paths from deployment
+To ignore specific paths from being deployed add the environment variable:
+```shell
+--ignorePath ../datahub-config/<path_to_ignore>
+```
+to your bash command
 
 ## How to run
 

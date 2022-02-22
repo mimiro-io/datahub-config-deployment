@@ -12,6 +12,7 @@ type Environment struct {
 	MimServer               string
 	Token                   string
 	RootPath                string
+	IgnorePath              []string
 	EnvironmentFile         string
 	DryRun                  bool
 	CreateManifestIfMissing bool
@@ -27,6 +28,10 @@ func (env *Environment) GetConfigFiles() ([]string, error) {
 	err := filepath.Walk(env.RootPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
+		}
+		if info.IsDir() && contains(env.IgnorePath, path){
+			pterm.Info.Println("ignoring path ", path)
+			return filepath.SkipDir
 		}
 		if info.IsDir() {
 			return nil
@@ -69,4 +74,13 @@ func (env *Environment) GetConfigType(path string) string {
 		return "unknown"
 
 	}
+}
+
+func contains(elems []string, v string) bool {
+	for _, s := range elems {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
