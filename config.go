@@ -41,6 +41,7 @@ func init() {
 	RootCmd.Flags().StringP("datahub", "d", "", "Datahub server URL")
 	RootCmd.Flags().String("token", "", "Signin Bearer token to use against the DataHub")
 	RootCmd.Flags().StringP("path", "p", "", "Root path of the config location")
+	RootCmd.Flags().StringArrayP("ignorePath", "i", nil, "paths to ignore from deployment")
 	RootCmd.Flags().StringP("env", "e", "", "Variable file to use for substitution")
 	RootCmd.Flags().StringP("log-format", "l", "", "Log format to use when executing mim commands")
 	RootCmd.Flags().Bool("dry-run", true, "If set to true, only test the changes without applying them")
