@@ -4,10 +4,12 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/pterm/pterm"
 	"io"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"strings"
 )
 
@@ -139,4 +141,31 @@ func LogError(error ErrorDetails, logFormat string) {
 	default:
 		pterm.DefaultParagraph.Println(error.Message)
 	}
+}
+
+func MimCommand(cmd []string, logFormat string, dryRun bool) ([]byte, error) {
+	cmdExec := exec.Command("/bin/bash", "-c", fmt.Sprintf("%s", strings.Join(cmd, " ")))
+	LogCommand(cmd, logFormat, "")
+	if dryRun {
+		return nil, nil
+	}
+	return cmdExec.CombinedOutput()
+}
+
+func MimDatasetStore(datasetName string, payload []byte, logFormat string, dryRun bool) error {
+	tmpFilename := "tmp_core_entity"
+	cmd := []string{"mim", "dataset", "store", datasetName, "-f", tmpFilename}
+	err := ioutil.WriteFile(tmpFilename, payload, 0644)
+	if err != nil {
+		pterm.Error.Println("Failed to write core entity to temp file")
+		return err
+	}
+	_, err = MimCommand(cmd, logFormat, dryRun)
+	err2 := os.Remove(tmpFilename)
+	if err2 != nil {
+		pterm.Error.Println("Failed to remove tmp file for core entity")
+		return err2
+	}
+
+	return err
 }

@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -130,11 +131,11 @@ func (app *App) loginMimCli() error {
 	args := []string{
 		"mim", "login", "add", "--alias=deploy", fmt.Sprintf("--server=%s", app.Env.MimServer),
 	}
-	utils.LogCommand(args, "default", "")
+
 	if app.Env.Token != "" {
 		args = append(args, fmt.Sprintf("--type token --token=%s", app.Env.Token))
 	}
-
+	utils.LogCommand(args, "default", "")
 	cmdMim1 := exec.Command("/bin/bash", "-c", fmt.Sprintf("%s", strings.Join(args, " ")))
 	output, err := cmdMim1.CombinedOutput()
 	if err != nil {
@@ -277,6 +278,21 @@ func (app *App) doStuff(files []string, variables map[string]interface{}) error 
 	return nil
 }
 
+type DatasetResponse struct {
+	Items            int      `json:"items"`
+	Name             string   `json:"name"`
+	PublicNamespaces []string `json:"publicNamespaces"`
+}
+
+type CoreEntity struct {
+	Id         string                 `json:"id"`
+	Recorded   int64                  `json:"recorded,omitempty"`
+	Deleted    bool                   `json:"deleted,omitempty"`
+	Refs       map[string]interface{} `json:"refs,omitempty"`
+	Props      map[string]interface{} `json:"props,omitempty"`
+	Namespaces map[string]interface{} `json:"namespaces,omitempty"`
+}
+
 func (app *App) executeOperations(manifest Manifest) error {
 	operations := manifest.Operations
 	var cmdOutputs []string
@@ -377,25 +393,91 @@ func (app *App) executeOperations(manifest Manifest) error {
 			}
 		}
 		// Check if required dataset need to be created
-		if operation.Config.Type == "job" && operation.Action != "delete" && operation.RequireDataset {
-			// Check if dataset exist already
+		if operation.Config.Type == "job" && operation.Action != "delete" {
+			// Check if job has dataset sink
 			sinkDataset := determineSinkDataset(operation.Config.JsonContent)
-			datasetCmd := []string{"mim", "dataset", "get", sinkDataset, "--json"}
-			getDatasetCmd := exec.Command("/bin/bash", "-c", fmt.Sprintf("%s", strings.Join(datasetCmd, " ")))
-			err := getDatasetCmd.Run()
-			if err != nil {
-				// Failed to get dataset. Proceeding to create on datahub.
-				pterm.Warning.Printf("Required dataset not available on datahub. Creating dataset '%s' for job '%s'.\n", sinkDataset, operation.Config.Id)
-				datasetCmd := []string{"mim", "dataset", "create", sinkDataset}
-				createDatasetCmd := exec.Command("/bin/bash", "-c", fmt.Sprintf("%s", strings.Join(datasetCmd, " ")))
-				utils.LogCommand(datasetCmd, app.Env.LogFormat, "")
-				cmdOutputs = append(cmdOutputs, strings.Join(datasetCmd, " "))
+			if sinkDataset != "" {
+				// Check if dataset exist already
+				datasetCmd := []string{"mim", "dataset", "get", sinkDataset, "--json"}
+				output, err := utils.MimCommand(datasetCmd, app.Env.LogFormat, false)
+				publicNamespaces := getPublicNamespaces(operation.Config.JsonContent)
+				if err != nil {
+					// Failed to get dataset. Proceeding to create on datahub.
+					pterm.Warning.Printf("Required dataset not available on datahub. Creating dataset '%s' for job '%s'.\n", sinkDataset, operation.Config.Title)
 
-				if !app.Env.DryRun {
-					output, err := createDatasetCmd.CombinedOutput()
-					if err != nil {
-						pterm.Error.Println("Failed to create dataset in datahub: ", string(output))
-						return err
+					datasetCmd := []string{"mim", "dataset", "create", sinkDataset}
+					if len(publicNamespaces) > 0 {
+						datasetCmd = []string{"mim", "dataset", "create", sinkDataset, "--publicNamespaces", fmt.Sprintf("'%s'", strings.Join(publicNamespaces, "','"))}
+					}
+					createDatasetCmd := exec.Command("/bin/bash", "-c", fmt.Sprintf("%s", strings.Join(datasetCmd, " ")))
+					utils.LogCommand(datasetCmd, app.Env.LogFormat, "")
+					cmdOutputs = append(cmdOutputs, strings.Join(datasetCmd, " "))
+
+					if !app.Env.DryRun {
+						output, err := createDatasetCmd.CombinedOutput()
+						if err != nil {
+							pterm.Error.Println("Failed to create dataset in datahub: ", string(output))
+							return err
+						}
+					}
+				} else {
+					// Dataset already exist, but we need to check if the public namespaces are defined
+					datasetResponse := &DatasetResponse{}
+					json.Unmarshal(output, datasetResponse)
+					remoteNamespaces := datasetResponse.PublicNamespaces
+					sort.Strings(publicNamespaces)
+					sort.Strings(remoteNamespaces)
+					needUpdate := false
+					if len(publicNamespaces) != len(remoteNamespaces) {
+						needUpdate = true
+					} else {
+						for i := range publicNamespaces {
+							if publicNamespaces[i] != remoteNamespaces[i] {
+								needUpdate = true
+							}
+						}
+					}
+					if needUpdate {
+						pterm.Warning.Printf("Public namespaces does not match config for dataset %s. Updating core dataset\n", sinkDataset)
+
+						coreCmd := []string{"mim", "dataset", "entities", "core.Dataset", "--json", "--limit=40000"}
+						getCoreCmd := exec.Command("/bin/bash", "-c", fmt.Sprintf("%s", strings.Join(coreCmd, " ")))
+						core, err := getCoreCmd.CombinedOutput()
+						if err != nil {
+							pterm.Error.Println("Failed to get core dataset in datahub: ", err)
+							return err
+						}
+						var coreDatasets []CoreEntity
+						json.Unmarshal(core, &coreDatasets)
+						var coreEntity CoreEntity
+						var context CoreEntity
+						for _, entity := range coreDatasets {
+							id := entity.Id[4:]
+							if id == sinkDataset {
+								coreEntity = entity
+							}
+							if entity.Id == "@context" {
+								context = entity
+							}
+						}
+						if coreEntity.Id == "" {
+							pterm.Error.Println("Failed to find dataset '%s' in core dataset", sinkDataset)
+							break
+						}
+						props := coreEntity.Props
+						if props == nil {
+							props = make(map[string]interface{})
+						}
+						props["ns0:publicNamespaces"] = publicNamespaces
+						coreEntity.Props = props
+						payload := []CoreEntity{context, coreEntity}
+						payloadJsonBytes, err := json.Marshal(payload)
+
+						err = utils.MimDatasetStore("core.Dataset", payloadJsonBytes, app.Env.LogFormat, app.Env.DryRun)
+						if err != nil && !app.Env.DryRun {
+							pterm.Error.Println("Failed to update public namespaces in core dataset for dataset ", sinkDataset)
+						}
+
 					}
 				}
 			}

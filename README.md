@@ -11,6 +11,10 @@ Based on the comparison, it creates a list of operations and utilizes the [mim c
 │   │   └── content-s3.json
 │   └── mysystem
 │       └── content-mysystem.json
+├── dataset
+│   ├── myfolder
+│   │   └── my-dataset.json
+│   └── my-other-dataset.json
 ├── environments
 │   ├── variables-dev.json
 │   ├── variables-prod.json
@@ -25,7 +29,7 @@ Based on the comparison, it creates a list of operations and utilizes the [mim c
 ```
 
 ## Required configuration changes
-* Jobs and contents need a type property with either "job" or "content" as value.
+* Jobs and content need a type property with either "job" or "content" as value.
 * Jobs with transform need to have a "path" property containing the relative path for the transform file inside the transform directory.
 ```json
 {
@@ -119,6 +123,24 @@ To ignore specific paths from being deployed add the environment variable:
 --ignorePath ../datahub-config/<path_to_ignore>
 ```
 to your bash command
+
+### Dataset creation and public namespaces
+When you define a `DatasetSink`, the named dataset will be created when the configuration is deployed to the datahub.
+
+**Public namespaces**
+
+If you need to define public namespaces for the dataset used by the sink, this can be defined in the job like this.
+```json
+    "sink": {
+        "Type": "DatasetSink",
+        "Name": "mysystem.Owner",
+        "publicNamespaces": [
+            "http://data.mimiro.io/owner/event/",
+            "http://data.mimiro.io/people/birthdate/"
+        ]
+    }
+```
+If the dataset is already created, the dataset will be updated with the defined public namespaces.
 
 ## How to run
 

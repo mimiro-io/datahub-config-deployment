@@ -35,11 +35,10 @@ type config struct {
 }
 
 type operation struct {
-	Config         config `json:"config"`
-	ConfigPath     string `json:"configPath"`
-	Action         string `json:"action"`
-	HasTransform   bool   `json:"hasTransform"`
-	RequireDataset bool   `json:"requireDataset"`
+	Config       config `json:"config"`
+	ConfigPath   string `json:"configPath"`
+	Action       string `json:"action"`
+	HasTransform bool   `json:"hasTransform"`
 }
 
 func NewManifest(env *environment.Environment) *ManifestConfig {
@@ -51,13 +50,23 @@ func hasTransform(JsonContent map[string]interface{}) bool {
 	return exist && value != nil
 }
 
-func requireDataset(JsonContent map[string]interface{}) bool {
-	_, value := JsonContent["requireDataset"]
-	return value
+func determineSinkDataset(jsonContent map[string]interface{}) string {
+	datasetName := jsonContent["sink"].(map[string]interface{})["Name"]
+	if datasetName != nil {
+		return datasetName.(string)
+	}
+	return ""
 }
 
-func determineSinkDataset(jsonContent map[string]interface{}) string {
-	return jsonContent["sink"].(map[string]interface{})["Name"].(string)
+func getPublicNamespaces(jsonContent map[string]interface{}) []string {
+	var namespaces []string
+	publicNamespaces := jsonContent["sink"].(map[string]interface{})["PublicNamespaces"]
+	if publicNamespaces != nil {
+		for _, value := range publicNamespaces.([]interface{}) {
+			namespaces = append(namespaces, value.(string))
+		}
+	}
+	return namespaces
 }
 
 func getTransformDigest(path string) (string, error) {
@@ -141,7 +150,6 @@ func diffManifest(previousManifest *Manifest, currentManifest Manifest) []operat
 		var action string
 		previous, exist := previousManifest.Manifest[key]
 		hasTransform := hasTransform(config.JsonContent)
-		requireDataset := requireDataset(config.JsonContent)
 		if hasTransform {
 			if config.TransformDigest != previous.TransformDigest {
 				action = "update"
@@ -155,11 +163,10 @@ func diffManifest(previousManifest *Manifest, currentManifest Manifest) []operat
 		}
 		if action == "add" || action == "update" {
 			op := operation{
-				Config:         config,
-				ConfigPath:     config.Path,
-				Action:         action,
-				HasTransform:   hasTransform,
-				RequireDataset: requireDataset,
+				Config:       config,
+				ConfigPath:   config.Path,
+				Action:       action,
+				HasTransform: hasTransform,
 			}
 			operations = append(operations, op)
 		}
