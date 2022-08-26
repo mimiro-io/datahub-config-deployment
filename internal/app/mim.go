@@ -24,10 +24,6 @@ func NewMim(env *environment.Environment) *MimConfig {
 func (m *MimConfig) MimCommand(cmd []string) ([]byte, error) {
 	cmdExec := exec.Command("/bin/bash", "-c", fmt.Sprintf("%s", strings.Join(cmd, " ")))
 
-	if m.Env.DryRun {
-		return nil, nil
-	}
-
 	return cmdExec.CombinedOutput()
 }
 
@@ -41,7 +37,11 @@ func (m *MimConfig) MimDatasetStore(datasetName string, payload []byte) ([]byte,
 	}
 	m.CmdOutputs = append(m.CmdOutputs, strings.Join(cmd, " "))
 	utils.LogCommand(cmd, m.Env.LogFormat, "")
-	output, err := m.MimCommand(cmd)
+	var output []byte
+	if !m.Env.DryRun {
+		output, err = m.MimCommand(cmd)
+	}
+
 	err2 := os.Remove(tmpFilename)
 	if err2 != nil {
 		pterm.Error.Println("Failed to remove tmp file for core entity")
@@ -55,7 +55,11 @@ func (m *MimConfig) MimDatasetDelete(datasetName string) error {
 	cmd := []string{"mim", "dataset", "delete", datasetName, "-C=false"}
 	m.CmdOutputs = append(m.CmdOutputs, strings.Join(cmd, " "))
 	utils.LogCommand(cmd, m.Env.LogFormat, "")
-	output, err := m.MimCommand(cmd)
+	var output []byte
+	var err error
+	if !m.Env.DryRun {
+		output, err = m.MimCommand(cmd)
+	}
 	if err != nil {
 		pterm.Error.Printf("Failed to delete dataset '%s':\n%s\n", datasetName, string(output))
 		return err
@@ -71,7 +75,11 @@ func (m *MimConfig) MimDatasetGet(datasetName string) (DatasetResponse, error) {
 		pterm.Error.Printf("Failed to get dataset '%s' from datahub: %s\n", datasetName, string(output))
 		return dataset, err
 	}
-	json.Unmarshal(output, dataset)
+	err = json.Unmarshal(output, &dataset)
+	if err != nil {
+		pterm.Error.Println("Failed to unmarshal dataset response: ", string(output))
+		return dataset, err
+	}
 	return dataset, nil
 }
 
@@ -82,11 +90,48 @@ func (m *MimConfig) MimDatasetCreate(datasetName string, publicNamespaces []stri
 	}
 	m.CmdOutputs = append(m.CmdOutputs, strings.Join(cmd, " "))
 	utils.LogCommand(cmd, m.Env.LogFormat, "")
-	output, err := m.MimCommand(cmd)
+	var output []byte
+	var err error
+	if !m.Env.DryRun {
+		output, err = m.MimCommand(cmd)
+	}
 	if err != nil {
 		pterm.Error.Println("Failed to create dataset in datahub: ", string(output))
 		return err
 	}
 	return nil
 
+}
+
+func (m *MimConfig) MimJobAdd(fileName string, transform string) ([]byte, error) {
+	cmd := []string{"mim", "job", "add", "-f", fileName}
+	if transform != "" {
+		cmd = []string{"mim", "job", "add", "-f", fileName, "-t", transform}
+	}
+	var output []byte
+	var err error
+	m.CmdOutputs = append(m.CmdOutputs, strings.Join(cmd, " "))
+	utils.LogCommand(cmd, m.Env.LogFormat, "")
+	if !m.Env.DryRun {
+		output, err = m.MimCommand(cmd)
+	}
+	if err != nil {
+		pterm.Error.Println("Failed to write job to datahub: ", string(output))
+	}
+	return output, err
+}
+
+func (m *MimConfig) MimJobDelete(jobId string) ([]byte, error) {
+	cmd := []string{"mim", "job", "delete", jobId, "-C=false"}
+	m.CmdOutputs = append(m.CmdOutputs, strings.Join(cmd, " "))
+	utils.LogCommand(cmd, m.Env.LogFormat, "")
+	var output []byte
+	var err error
+	if !m.Env.DryRun {
+		output, err = m.MimCommand(cmd)
+	}
+	if err != nil {
+		pterm.Error.Printf("Failed to delete job '%s':\n%s\n", jobId, string(output))
+	}
+	return output, err
 }

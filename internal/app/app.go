@@ -312,7 +312,10 @@ func (app *App) executeOperations(manifest Manifest) error {
 		app.Mim.CmdOutputs = append(app.Mim.CmdOutputs, message)
 	}
 	for _, operation := range operations {
-		tmpFileName := "tmp_" + operation.Config.Id + ".json"
+		tmpFileName := operation.Config.Id + ".json"
+		if operation.Config.Title != "" {
+			tmpFileName = operation.Config.Title + ".json"
+		}
 		jsonContent, err := json.Marshal(operation.Config.JsonContent)
 		if operation.Config.Type == "dataset" {
 			jsonContent, err = json.Marshal(operation.Config.JsonContent["entities"])
@@ -357,35 +360,28 @@ func (app *App) executeOperations(manifest Manifest) error {
 				}
 			}
 		} else if operation.Config.Type == "job" {
-			var jobCmd []string
+			var output []byte
+			var err error
 			if operation.Action == "delete" {
-				jobCmd = []string{"mim", "job", "delete", operation.Config.Id, "-C=false"}
+				output, err = app.Mim.MimJobDelete(operation.Config.Id)
 			} else {
 				// Will handle both add and update
+				transformFullPath := ""
 				if operation.HasTransform {
 					transformPath := operation.Config.JsonContent["transform"].(map[string]interface{})["Path"].(string)
-					transformFullPath := filepath.Join(app.Env.RootPath, "transforms", transformPath)
-					jobCmd = []string{"mim", "job", "add", "-f", tmpFileName, "-t", transformFullPath}
-				} else {
-					jobCmd = []string{"mim", "job", "add", "-f", tmpFileName}
+					transformFullPath = filepath.Join(app.Env.RootPath, "transforms", transformPath)
 				}
+				output, err = app.Mim.MimJobAdd(tmpFileName, transformFullPath)
 			}
-			utils.LogCommand(jobCmd, app.Env.LogFormat, operation.Config.Title)
-			app.Mim.CmdOutputs = append(app.Mim.CmdOutputs, strings.Join(jobCmd, " "))
-
-			executeCmd := exec.Command("/bin/bash", "-c", fmt.Sprintf("%s", strings.Join(jobCmd, " ")))
-			if !app.Env.DryRun {
-				output, err := executeCmd.CombinedOutput()
-				if err != nil {
-					errBody := utils.ErrorDetails{
-						File:    operation.ConfigPath,
-						Line:    0,
-						Col:     0,
-						Message: fmt.Sprintf("Failed to write job to datahub: \n%s\n%s\n", string(output), string(jsonContent)),
-					}
-					utils.LogError(errBody, app.Env.LogFormat)
-					return err
+			if err != nil {
+				errBody := utils.ErrorDetails{
+					File:    operation.ConfigPath,
+					Line:    0,
+					Col:     0,
+					Message: fmt.Sprintf("Failed to write job to datahub: \n%s\n%s\n", string(output), string(jsonContent)),
 				}
+				utils.LogError(errBody, app.Env.LogFormat)
+				return err
 			}
 
 		} else if operation.Config.Type == "dataset" {
@@ -438,36 +434,18 @@ func (app *App) executeOperations(manifest Manifest) error {
 			sinkDataset := determineSinkDataset(operation.Config.JsonContent)
 			if sinkDataset != "" {
 				// Check if dataset exist already
-				datasetCmd := []string{"mim", "dataset", "get", sinkDataset, "--json"}
-				output, err := utils.MimCommand(datasetCmd, app.Env.LogFormat, false)
+				datasetResponse, err := app.Mim.MimDatasetGet(sinkDataset)
 				publicNamespaces := getPublicNamespaces(operation.Config.JsonContent)
 				if err != nil {
 					// Failed to get dataset. Proceeding to create on datahub.
 					pterm.Warning.Printf("Required dataset not available on datahub. Creating dataset '%s' for job '%s'.\n", sinkDataset, operation.Config.Title)
 
-					datasetCmd := []string{"mim", "dataset", "create", sinkDataset}
-					if len(publicNamespaces) > 0 {
-						datasetCmd = []string{"mim", "dataset", "create", sinkDataset, "--publicNamespaces", fmt.Sprintf("'%s'", strings.Join(publicNamespaces, "','"))}
-					}
-					createDatasetCmd := exec.Command("/bin/bash", "-c", fmt.Sprintf("%s", strings.Join(datasetCmd, " ")))
-					utils.LogCommand(datasetCmd, app.Env.LogFormat, "")
-					app.Mim.CmdOutputs = append(app.Mim.CmdOutputs, strings.Join(datasetCmd, " "))
-
-					if !app.Env.DryRun {
-						output, err := createDatasetCmd.CombinedOutput()
-						if err != nil {
-							pterm.Error.Println("Failed to create dataset in datahub: ", string(output))
-							return err
-						}
+					err := app.Mim.MimDatasetCreate(sinkDataset, publicNamespaces)
+					if err != nil {
+						return err
 					}
 				} else {
 					// Dataset already exist, but we need to check if the public namespaces are defined
-					datasetResponse := &DatasetResponse{}
-					err := json.Unmarshal(output, datasetResponse)
-					if err != nil {
-						pterm.Error.Printf("Failed to unmarshal dataset response for '%s' :\n%s\n", sinkDataset, string(output))
-						return err
-					}
 					remoteNamespaces := datasetResponse.PublicNamespaces
 					sort.Strings(publicNamespaces)
 					sort.Strings(remoteNamespaces)
