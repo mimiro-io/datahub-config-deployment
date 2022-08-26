@@ -142,6 +142,47 @@ If you need to define public namespaces for the dataset used by the sink, this c
 ```
 If the dataset is already created, the dataset will be updated with the defined public namespaces.
 
+#### Create dataset and upload entities stored in your config
+In some cases we need to datasets that we manually create and can't be read from a different source. This can be achieved by adding files under the `dataset` directory.
+Files in there need to structured like this:
+
+```json
+{
+    "type": "dataset",
+    "datasetName": "cima.AnimalType",
+    "publicNamespaces": [],
+    "entities": [
+        {
+            "id": "@context",
+            "namespaces": {
+                "ns1": "http://data.mimiro.io/cima/",
+                "ns2": "http://data.mimiro.io/sdb/animaltype/",
+                "ns3": "http://www.w3.org/2000/01/rdf-schema#"
+            }
+        },
+        {
+            "id": "ns2:cow",
+            "refs": {
+                "ns3:type": "ns1:AnimalType"
+            },
+            "props": {
+                "ns1:name": "Cow"
+            }
+        },
+        {
+            "id": "ns2:pig",
+            "refs": {
+                "ns3:type": "ns1:AnimalType"
+            },
+            "props": {
+                "ns1:name": "Pig"
+            }
+        }
+    ]
+}
+
+```
+
 ## How to run
 
 The following configuration properties can either be set by environment variables or by changing the .env file
