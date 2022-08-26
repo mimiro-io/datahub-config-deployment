@@ -20,6 +20,12 @@ type ErrorDetails struct {
 	Message string
 }
 
+type DatasetResponse struct {
+	Items            int      `json:"items"`
+	Name             string   `json:"name"`
+	PublicNamespaces []string `json:"publicNamespaces"`
+}
+
 func HandleError(err error) {
 	if err != nil {
 		printer := pterm.PrefixPrinter{
@@ -153,11 +159,11 @@ func MimCommand(cmd []string, logFormat string, dryRun bool) ([]byte, error) {
 }
 
 func MimDatasetStore(datasetName string, payload []byte, logFormat string, dryRun bool) error {
-	tmpFilename := "tmp_core_entity"
+	tmpFilename := "tmp_entity"
 	cmd := []string{"mim", "dataset", "store", datasetName, "-f", tmpFilename}
 	err := ioutil.WriteFile(tmpFilename, payload, 0644)
 	if err != nil {
-		pterm.Error.Println("Failed to write core entity to temp file")
+		pterm.Error.Println("Failed to write entity to temp file")
 		return err
 	}
 	_, err = MimCommand(cmd, logFormat, dryRun)
@@ -168,4 +174,40 @@ func MimDatasetStore(datasetName string, payload []byte, logFormat string, dryRu
 	}
 
 	return err
+}
+
+func MimDatasetDelete(datasetName string, logFormat string, dryRun bool) error {
+	cmd := []string{"mim", "dataset", "delete", datasetName, "-C=false"}
+	output, err := MimCommand(cmd, logFormat, dryRun)
+	if err != nil {
+		pterm.Error.Printf("Failed to delete dataset '%s':\n%s\n", datasetName, string(output))
+		return err
+	}
+	return nil
+}
+
+func MimDatasetGet(datasetName string, logFormat string, dryRun bool) (DatasetResponse, error) {
+	cmd := []string{"mim", "dataset", "get", datasetName, "--json"}
+	output, err := MimCommand(cmd, logFormat, dryRun)
+	var dataset DatasetResponse
+	if err != nil {
+		pterm.Error.Printf("Failed to get dataset '%s' from datahub: %s\n", datasetName, string(output))
+		return dataset, err
+	}
+	json.Unmarshal(output, dataset)
+	return dataset, nil
+}
+
+func MimDatasetCreate(datasetName string, publicNamespaces []string, logFormat string, dryRun bool) error {
+	cmd := []string{"mim", "dataset", "create", datasetName}
+	if len(publicNamespaces) > 0 {
+		cmd = []string{"mim", "dataset", "create", datasetName, "--publicNamespaces", fmt.Sprintf("'%s'", strings.Join(publicNamespaces, "','"))}
+	}
+	output, err := MimCommand(cmd, logFormat, dryRun)
+	if err != nil {
+		pterm.Error.Println("Failed to create dataset in datahub: ", string(output))
+		return err
+	}
+	return nil
+
 }
