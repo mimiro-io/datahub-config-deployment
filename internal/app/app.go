@@ -283,21 +283,6 @@ func (app *App) doStuff(files []string, variables map[string]interface{}) error 
 	return nil
 }
 
-type DatasetResponse struct {
-	Items            int      `json:"items"`
-	Name             string   `json:"name"`
-	PublicNamespaces []string `json:"publicNamespaces"`
-}
-
-type CoreEntity struct {
-	Id         string                 `json:"id"`
-	Recorded   int64                  `json:"recorded,omitempty"`
-	Deleted    bool                   `json:"deleted,omitempty"`
-	Refs       map[string]interface{} `json:"refs,omitempty"`
-	Props      map[string]interface{} `json:"props,omitempty"`
-	Namespaces map[string]interface{} `json:"namespaces,omitempty"`
-}
-
 func (app *App) executeOperations(manifest Manifest) error {
 	operations := manifest.Operations
 
@@ -335,30 +320,24 @@ func (app *App) executeOperations(manifest Manifest) error {
 		}
 
 		if operation.Config.Type == "content" {
-			var args []string
+			var output []byte
+			var err error
 			if operation.Action == "delete" {
-				args = []string{"mim", "content", "delete", operation.Config.Id, "-C=false"}
+				output, err = app.Mim.MimContentDelete(operation.Config.Id)
 			} else {
-				args = []string{"mim", "content", "add", "-f", tmpFileName}
+				output, err = app.Mim.MimContentAdd(tmpFileName)
 			}
-
-			utils.LogCommand(args, app.Env.LogFormat, "")
-			app.Mim.CmdOutputs = append(app.Mim.CmdOutputs, strings.Join(args, " "))
-
-			if !app.Env.DryRun {
-				executeCmd := exec.Command("/bin/bash", "-c", fmt.Sprintf("%s", strings.Join(args, " ")))
-				output, err := executeCmd.CombinedOutput()
-				if err != nil {
-					errBody := utils.ErrorDetails{
-						File:    operation.ConfigPath,
-						Line:    0,
-						Col:     0,
-						Message: fmt.Sprintf("Failed to write content '%s' to datahub: %s\n", operation.Config.Id, string(output)),
-					}
-					utils.LogError(errBody, app.Env.LogFormat)
-					return err
+			if err != nil {
+				errBody := utils.ErrorDetails{
+					File:    operation.ConfigPath,
+					Line:    0,
+					Col:     0,
+					Message: fmt.Sprintf("Failed to write content '%s' to datahub: %s\n", operation.Config.Id, string(output)),
 				}
+				utils.LogError(errBody, app.Env.LogFormat)
+				return err
 			}
+
 		} else if operation.Config.Type == "job" {
 			var output []byte
 			var err error
@@ -462,21 +441,12 @@ func (app *App) executeOperations(manifest Manifest) error {
 					if needUpdate {
 						pterm.Warning.Printf("Public namespaces does not match config for dataset %s. Updating core dataset\n", sinkDataset)
 
-						coreCmd := []string{"mim", "dataset", "entities", "core.Dataset", "--json", "--limit=40000"}
-						getCoreCmd := exec.Command("/bin/bash", "-c", fmt.Sprintf("%s", strings.Join(coreCmd, " ")))
-						core, err := getCoreCmd.CombinedOutput()
+						coreDatasets, err := app.Mim.MimDatasetEntities("core.Dataset")
 						if err != nil {
-							pterm.Error.Println("Failed to get core dataset in datahub: ", err)
 							return err
 						}
-						var coreDatasets []CoreEntity
-						err = json.Unmarshal(core, &coreDatasets)
-						if err != nil {
-							pterm.Error.Println("Failed to unmarshal core dataset: ", string(core))
-							return err
-						}
-						var coreEntity CoreEntity
-						var context CoreEntity
+						var coreEntity Entity
+						var context Entity
 						for _, entity := range coreDatasets {
 							id := entity.Id[4:]
 							if id == sinkDataset {
@@ -496,14 +466,13 @@ func (app *App) executeOperations(manifest Manifest) error {
 						}
 						props["ns0:publicNamespaces"] = publicNamespaces
 						coreEntity.Props = props
-						payload := []CoreEntity{context, coreEntity}
+						payload := []Entity{context, coreEntity}
 						payloadJsonBytes, err := json.Marshal(payload)
 
 						_, err = app.Mim.MimDatasetStore("core.Dataset", payloadJsonBytes)
-						if err != nil && !app.Env.DryRun {
+						if err != nil {
 							pterm.Error.Println("Failed to update public namespaces in core dataset for dataset ", sinkDataset)
 						}
-
 					}
 				}
 			}

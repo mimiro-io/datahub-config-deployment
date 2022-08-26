@@ -17,13 +17,27 @@ type MimConfig struct {
 	CmdOutputs []string
 }
 
+type Entity struct {
+	Id         string                 `json:"id"`
+	Recorded   int64                  `json:"recorded,omitempty"`
+	Deleted    bool                   `json:"deleted,omitempty"`
+	Refs       map[string]interface{} `json:"refs,omitempty"`
+	Props      map[string]interface{} `json:"props,omitempty"`
+	Namespaces map[string]interface{} `json:"namespaces,omitempty"`
+}
+
+type DatasetResponse struct {
+	Items            int      `json:"items"`
+	Name             string   `json:"name"`
+	PublicNamespaces []string `json:"publicNamespaces"`
+}
+
 func NewMim(env *environment.Environment) *MimConfig {
 	return &MimConfig{Env: env}
 }
 
 func (m *MimConfig) MimCommand(cmd []string) ([]byte, error) {
 	cmdExec := exec.Command("/bin/bash", "-c", fmt.Sprintf("%s", strings.Join(cmd, " ")))
-
 	return cmdExec.CombinedOutput()
 }
 
@@ -103,6 +117,22 @@ func (m *MimConfig) MimDatasetCreate(datasetName string, publicNamespaces []stri
 
 }
 
+func (m *MimConfig) MimDatasetEntities(datasetName string) ([]Entity, error) {
+	cmd := []string{"mim", "dataset", "entities", datasetName, "--json", "--limit=40000"}
+	output, err := m.MimCommand(cmd)
+	if err != nil {
+		pterm.Error.Println("Failed to get dataset entities from datahub: ", string(output))
+		return nil, err
+	}
+	var entities []Entity
+	err = json.Unmarshal(output, &entities)
+	if err != nil {
+		pterm.Error.Println("Failed to unmarshal dataset entities response: ", string(output))
+	}
+	return entities, err
+
+}
+
 func (m *MimConfig) MimJobAdd(fileName string, transform string) ([]byte, error) {
 	cmd := []string{"mim", "job", "add", "-f", fileName}
 	if transform != "" {
@@ -132,6 +162,36 @@ func (m *MimConfig) MimJobDelete(jobId string) ([]byte, error) {
 	}
 	if err != nil {
 		pterm.Error.Printf("Failed to delete job '%s':\n%s\n", jobId, string(output))
+	}
+	return output, err
+}
+
+func (m *MimConfig) MimContentAdd(fileName string) ([]byte, error) {
+	cmd := []string{"mim", "content", "add", "-f", fileName}
+	var output []byte
+	var err error
+	m.CmdOutputs = append(m.CmdOutputs, strings.Join(cmd, " "))
+	utils.LogCommand(cmd, m.Env.LogFormat, "")
+	if !m.Env.DryRun {
+		output, err = m.MimCommand(cmd)
+	}
+	if err != nil {
+		pterm.Error.Println("Failed to write content to datahub: ", string(output))
+	}
+	return output, err
+}
+
+func (m *MimConfig) MimContentDelete(contentId string) ([]byte, error) {
+	cmd := []string{"mim", "content", "delete", contentId, "-C=false"}
+	m.CmdOutputs = append(m.CmdOutputs, strings.Join(cmd, " "))
+	utils.LogCommand(cmd, m.Env.LogFormat, "")
+	var output []byte
+	var err error
+	if !m.Env.DryRun {
+		output, err = m.MimCommand(cmd)
+	}
+	if err != nil {
+		pterm.Error.Printf("Failed to delete content '%s':\n%s\n", contentId, string(output))
 	}
 	return output, err
 }
