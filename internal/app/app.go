@@ -457,7 +457,7 @@ func (app *App) executeOperations(manifest Manifest) error {
 							}
 						}
 						if coreEntity.Id == "" {
-							pterm.Error.Println("Failed to find dataset '%s' in core dataset", sinkDataset)
+							pterm.Error.Printf("Failed to find dataset '%s' in core dataset", sinkDataset)
 							break
 						}
 						props := coreEntity.Props
