@@ -11,6 +11,10 @@ Based on the comparison, it creates a list of operations and utilizes the [mim c
 │   │   └── content-s3.json
 │   └── mysystem
 │       └── content-mysystem.json
+├── dataset
+│   ├── myfolder
+│   │   └── my-dataset.json
+│   └── my-other-dataset.json
 ├── environments
 │   ├── variables-dev.json
 │   ├── variables-prod.json
@@ -25,7 +29,7 @@ Based on the comparison, it creates a list of operations and utilizes the [mim c
 ```
 
 ## Required configuration changes
-* Jobs and contents need a type property with either "job" or "content" as value.
+* Jobs and content need a type property with either "job" or "content" as value.
 * Jobs with transform need to have a "path" property containing the relative path for the transform file inside the transform directory.
 ```json
 {
@@ -119,6 +123,65 @@ To ignore specific paths from being deployed add the environment variable:
 --ignorePath ../datahub-config/<path_to_ignore>
 ```
 to your bash command
+
+### Dataset creation and public namespaces
+When you define a `DatasetSink`, the named dataset will be created when the configuration is deployed to the datahub.
+
+**Public namespaces**
+
+If you need to define public namespaces for the dataset used by the sink, this can be defined in the job like this.
+```json
+    "sink": {
+        "Type": "DatasetSink",
+        "Name": "mysystem.Owner",
+        "publicNamespaces": [
+            "http://data.mimiro.io/owner/event/",
+            "http://data.mimiro.io/people/birthdate/"
+        ]
+    }
+```
+If the dataset is already created, the dataset will be updated with the defined public namespaces.
+
+#### Create dataset and upload entities stored in your config
+In some cases we need to datasets that we manually create and can't be read from a different source. This can be achieved by adding files under the `dataset` directory.
+Files in there need to structured like this:
+
+```json
+{
+    "type": "dataset",
+    "datasetName": "cima.AnimalType",
+    "publicNamespaces": [],
+    "entities": [
+        {
+            "id": "@context",
+            "namespaces": {
+                "ns1": "http://data.mimiro.io/cima/",
+                "ns2": "http://data.mimiro.io/sdb/animaltype/",
+                "ns3": "http://www.w3.org/2000/01/rdf-schema#"
+            }
+        },
+        {
+            "id": "ns2:cow",
+            "refs": {
+                "ns3:type": "ns1:AnimalType"
+            },
+            "props": {
+                "ns1:name": "Cow"
+            }
+        },
+        {
+            "id": "ns2:pig",
+            "refs": {
+                "ns3:type": "ns1:AnimalType"
+            },
+            "props": {
+                "ns1:name": "Pig"
+            }
+        }
+    ]
+}
+
+```
 
 ## How to run
 

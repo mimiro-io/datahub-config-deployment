@@ -29,7 +29,7 @@ func (env *Environment) GetConfigFiles() ([]string, error) {
 		if err != nil {
 			return err
 		}
-		if info.IsDir() && contains(env.IgnorePath, path){
+		if info.IsDir() && contains(env.IgnorePath, path) {
 			pterm.Info.Println("ignoring path ", path)
 			return filepath.SkipDir
 		}
@@ -70,6 +70,8 @@ func (env *Environment) GetConfigType(path string) string {
 		return "content"
 	case "transforms":
 		return "transform"
+	case "dataset":
+		return "dataset"
 	default:
 		return "unknown"
 

@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -21,6 +22,7 @@ type App struct {
 	Env *environment.Environment
 	T   *templating.Templating
 	M   *ManifestConfig
+	Mim *MimConfig
 }
 
 func NewApp(cmd *cobra.Command, args []string) (*App, error) {
@@ -85,6 +87,7 @@ func NewApp(cmd *cobra.Command, args []string) (*App, error) {
 		Env: e,
 		T:   templating.NewTemplating(),
 		M:   NewManifest(e),
+		Mim: NewMim(e),
 	}, nil
 }
 
@@ -130,11 +133,11 @@ func (app *App) loginMimCli() error {
 	args := []string{
 		"mim", "login", "add", "--alias=deploy", fmt.Sprintf("--server=%s", app.Env.MimServer),
 	}
-	utils.LogCommand(args, "default", "")
+
 	if app.Env.Token != "" {
 		args = append(args, fmt.Sprintf("--type token --token=%s", app.Env.Token))
 	}
-
+	utils.LogCommand(args, "default", "")
 	cmdMim1 := exec.Command("/bin/bash", "-c", fmt.Sprintf("%s", strings.Join(args, " ")))
 	output, err := cmdMim1.CombinedOutput()
 	if err != nil {
@@ -175,7 +178,7 @@ func (app *App) doStuff(files []string, variables map[string]interface{}) error 
 		if !exist {
 			continue
 		}
-		if fileType == "job" || fileType == "content" {
+		if fileType == "job" || fileType == "content" || fileType == "dataset" {
 
 			var transformDigest string
 			if hasTransform(jsonContent) {
@@ -203,6 +206,9 @@ func (app *App) doStuff(files []string, variables map[string]interface{}) error 
 			jsonId, exist := jsonContent["id"].(string)
 			if !exist {
 				jsonId = ""
+				if fileType == "dataset" {
+					jsonId = jsonContent["datasetName"].(string)
+				}
 			}
 			jsonTitle, exist := jsonContent["title"].(string)
 			if !exist {
@@ -279,21 +285,26 @@ func (app *App) doStuff(files []string, variables map[string]interface{}) error 
 
 func (app *App) executeOperations(manifest Manifest) error {
 	operations := manifest.Operations
-	var cmdOutputs []string
 
 	pterm.Println()
 	if app.Env.DryRun {
 		message := "Dry run enabled. Showing commands that would be executed without dry run enabled."
 		utils.LogPlain(message, app.Env.LogFormat)
-		cmdOutputs = append(cmdOutputs, message)
+		app.Mim.CmdOutputs = append(app.Mim.CmdOutputs, message)
 	} else {
 		message := "The following commands will be written to datahub using the mim cli:"
 		utils.LogPlain(message, app.Env.LogFormat)
-		cmdOutputs = append(cmdOutputs, message)
+		app.Mim.CmdOutputs = append(app.Mim.CmdOutputs, message)
 	}
 	for _, operation := range operations {
-		tmpFileName := "tmp_" + operation.Config.Id + ".json"
+		tmpFileName := operation.Config.Id + ".json"
+		if operation.Config.Title != "" {
+			tmpFileName = operation.Config.Title + ".json"
+		}
 		jsonContent, err := json.Marshal(operation.Config.JsonContent)
+		if operation.Config.Type == "dataset" {
+			jsonContent, err = json.Marshal(operation.Config.JsonContent["entities"])
+		}
 
 		if operation.Action != "delete" {
 			if err != nil {
@@ -309,64 +320,84 @@ func (app *App) executeOperations(manifest Manifest) error {
 		}
 
 		if operation.Config.Type == "content" {
-			var args []string
+			var output []byte
+			var err error
 			if operation.Action == "delete" {
-				args = []string{"mim", "content", "delete", operation.Config.Id, "-C=false"}
+				output, err = app.Mim.MimContentDelete(operation.Config.Id)
 			} else {
-				args = []string{"mim", "content", "add", "-f", tmpFileName}
+				output, err = app.Mim.MimContentAdd(tmpFileName)
 			}
-
-			utils.LogCommand(args, app.Env.LogFormat, "")
-			cmdOutputs = append(cmdOutputs, strings.Join(args, " "))
-
-			if !app.Env.DryRun {
-				executeCmd := exec.Command("/bin/bash", "-c", fmt.Sprintf("%s", strings.Join(args, " ")))
-				output, err := executeCmd.CombinedOutput()
-				if err != nil {
-					errBody := utils.ErrorDetails{
-						File:    operation.ConfigPath,
-						Line:    0,
-						Col:     0,
-						Message: fmt.Sprintf("Failed to write content '%s' to datahub: %s\n", operation.Config.Id, string(output)),
-					}
-					utils.LogError(errBody, app.Env.LogFormat)
-					//pterm.Error.Printf("Failed to write content '%s' to datahub: %s\n", operation.Config.Id, string(output))
-					return err
+			if err != nil {
+				errBody := utils.ErrorDetails{
+					File:    operation.ConfigPath,
+					Line:    0,
+					Col:     0,
+					Message: fmt.Sprintf("Failed to write content '%s' to datahub: %s\n", operation.Config.Id, string(output)),
 				}
+				utils.LogError(errBody, app.Env.LogFormat)
+				return err
 			}
+
 		} else if operation.Config.Type == "job" {
-			var jobCmd []string
+			var output []byte
+			var err error
 			if operation.Action == "delete" {
-				jobCmd = []string{"mim", "job", "delete", operation.Config.Id, "-C=false"}
+				output, err = app.Mim.MimJobDelete(operation.Config.Id)
 			} else {
 				// Will handle both add and update
+				transformFullPath := ""
 				if operation.HasTransform {
 					transformPath := operation.Config.JsonContent["transform"].(map[string]interface{})["Path"].(string)
-					transformFullPath := filepath.Join(app.Env.RootPath, "transforms", transformPath)
-					jobCmd = []string{"mim", "job", "add", "-f", tmpFileName, "-t", transformFullPath}
-				} else {
-					jobCmd = []string{"mim", "job", "add", "-f", tmpFileName}
+					transformFullPath = filepath.Join(app.Env.RootPath, "transforms", transformPath)
 				}
+				output, err = app.Mim.MimJobAdd(tmpFileName, transformFullPath)
 			}
-			utils.LogCommand(jobCmd, app.Env.LogFormat, operation.Config.Title)
-			cmdOutputs = append(cmdOutputs, strings.Join(jobCmd, " "))
+			if err != nil {
+				errBody := utils.ErrorDetails{
+					File:    operation.ConfigPath,
+					Line:    0,
+					Col:     0,
+					Message: fmt.Sprintf("Failed to write job to datahub: \n%s\n%s\n", string(output), string(jsonContent)),
+				}
+				utils.LogError(errBody, app.Env.LogFormat)
+				return err
+			}
 
-			executeCmd := exec.Command("/bin/bash", "-c", fmt.Sprintf("%s", strings.Join(jobCmd, " ")))
-			if !app.Env.DryRun {
-				output, err := executeCmd.CombinedOutput()
+		} else if operation.Config.Type == "dataset" {
+			if operation.Action == "delete" {
+				err := app.Mim.MimDatasetDelete(operation.Config.Id)
 				if err != nil {
-					errBody := utils.ErrorDetails{
-						File:    operation.ConfigPath,
-						Line:    0,
-						Col:     0,
-						Message: fmt.Sprintf("Failed to write job to datahub: \n%s\n%s\n", string(output), string(jsonContent)),
-					}
-					utils.LogError(errBody, app.Env.LogFormat)
-					//pterm.Error.Printf("Failed to write job to datahub: %s\n%s\n", string(output), string(jsonContent))
 					return err
 				}
+			} else {
+				ns, exist := operation.Config.JsonContent["publicNamespaces"]
+				var publicNamespace []string
+				if exist && len(ns.([]interface{})) > 0 {
+					publicNamespace = ns.([]string)
+				}
+				if operation.Action == "add" {
+					err := app.Mim.MimDatasetCreate(operation.Config.Id, publicNamespace)
+					if err != nil {
+						return err
+					}
+				}
+				output, err := app.Mim.MimDatasetStore(operation.Config.Id, jsonContent)
+				if err != nil {
+					if strings.Contains(string(output), "dataset does not exist") {
+						// Create missing dataset and try again
+						err := app.Mim.MimDatasetCreate(operation.Config.Id, publicNamespace)
+						if err != nil {
+							return err
+						}
+						_, err = app.Mim.MimDatasetStore(operation.Config.Id, jsonContent)
+						if err != nil {
+							return err
+						}
+					} else {
+						return err
+					}
+				}
 			}
-
 		}
 		if operation.Action != "delete" {
 			// Remove temp file
@@ -377,25 +408,71 @@ func (app *App) executeOperations(manifest Manifest) error {
 			}
 		}
 		// Check if required dataset need to be created
-		if operation.Config.Type == "job" && operation.Action != "delete" && operation.RequireDataset {
-			// Check if dataset exist already
+		if operation.Config.Type == "job" && operation.Action != "delete" {
+			// Check if job has dataset sink
 			sinkDataset := determineSinkDataset(operation.Config.JsonContent)
-			datasetCmd := []string{"mim", "dataset", "get", sinkDataset, "--json"}
-			getDatasetCmd := exec.Command("/bin/bash", "-c", fmt.Sprintf("%s", strings.Join(datasetCmd, " ")))
-			err := getDatasetCmd.Run()
-			if err != nil {
-				// Failed to get dataset. Proceeding to create on datahub.
-				pterm.Warning.Printf("Required dataset not available on datahub. Creating dataset '%s' for job '%s'.\n", sinkDataset, operation.Config.Id)
-				datasetCmd := []string{"mim", "dataset", "create", sinkDataset}
-				createDatasetCmd := exec.Command("/bin/bash", "-c", fmt.Sprintf("%s", strings.Join(datasetCmd, " ")))
-				utils.LogCommand(datasetCmd, app.Env.LogFormat, "")
-				cmdOutputs = append(cmdOutputs, strings.Join(datasetCmd, " "))
+			if sinkDataset != "" {
+				// Check if dataset exist already
+				datasetResponse, err := app.Mim.MimDatasetGet(sinkDataset)
+				publicNamespaces := getPublicNamespaces(operation.Config.JsonContent)
+				if err != nil {
+					// Failed to get dataset. Proceeding to create on datahub.
+					pterm.Warning.Printf("Required dataset not available on datahub. Creating dataset '%s' for job '%s'.\n", sinkDataset, operation.Config.Title)
 
-				if !app.Env.DryRun {
-					output, err := createDatasetCmd.CombinedOutput()
+					err := app.Mim.MimDatasetCreate(sinkDataset, publicNamespaces)
 					if err != nil {
-						pterm.Error.Println("Failed to create dataset in datahub: ", string(output))
 						return err
+					}
+				} else {
+					// Dataset already exist, but we need to check if the public namespaces are defined
+					remoteNamespaces := datasetResponse.PublicNamespaces
+					sort.Strings(publicNamespaces)
+					sort.Strings(remoteNamespaces)
+					needUpdate := false
+					if len(publicNamespaces) != len(remoteNamespaces) {
+						needUpdate = true
+					} else {
+						for i := range publicNamespaces {
+							if publicNamespaces[i] != remoteNamespaces[i] {
+								needUpdate = true
+							}
+						}
+					}
+					if needUpdate {
+						pterm.Warning.Printf("Public namespaces does not match config for dataset %s. Updating core dataset\n", sinkDataset)
+
+						coreDatasets, err := app.Mim.MimDatasetEntities("core.Dataset")
+						if err != nil {
+							return err
+						}
+						var coreEntity Entity
+						var context Entity
+						for _, entity := range coreDatasets {
+							id := entity.Id[4:]
+							if id == sinkDataset {
+								coreEntity = entity
+							}
+							if entity.Id == "@context" {
+								context = entity
+							}
+						}
+						if coreEntity.Id == "" {
+							pterm.Error.Println("Failed to find dataset '%s' in core dataset", sinkDataset)
+							break
+						}
+						props := coreEntity.Props
+						if props == nil {
+							props = make(map[string]interface{})
+						}
+						props["ns0:publicNamespaces"] = publicNamespaces
+						coreEntity.Props = props
+						payload := []Entity{context, coreEntity}
+						payloadJsonBytes, err := json.Marshal(payload)
+
+						_, err = app.Mim.MimDatasetStore("core.Dataset", payloadJsonBytes)
+						if err != nil {
+							pterm.Error.Println("Failed to update public namespaces in core dataset for dataset ", sinkDataset)
+						}
 					}
 				}
 			}
@@ -403,7 +480,7 @@ func (app *App) executeOperations(manifest Manifest) error {
 
 	}
 	if app.Env.LogFormat == "github" {
-		pterm.DefaultBasicText.Println("::set-output name=dry_run_output::", strings.Join(cmdOutputs, "%0A* "))
+		pterm.DefaultBasicText.Println("::set-output name=dry_run_output::", strings.Join(app.Mim.CmdOutputs, "%0A* "))
 	}
 	return nil
 }
