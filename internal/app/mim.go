@@ -97,7 +97,7 @@ func (m *MimConfig) MimDatasetGet(datasetName string) (DatasetResponse, error) {
 	return dataset, nil
 }
 
-func (m *MimConfig) MimDatasetCreate(datasetName string, publicNamespaces []string) error {
+func (m *MimConfig) MimDatasetCreate(datasetName string, publicNamespaces []string) ([]byte, error) {
 	cmd := []string{"mim", "dataset", "create", datasetName}
 	if len(publicNamespaces) > 0 {
 		cmd = []string{"mim", "dataset", "create", datasetName, "--publicNamespaces", fmt.Sprintf("'%s'", strings.Join(publicNamespaces, "','"))}
@@ -111,9 +111,9 @@ func (m *MimConfig) MimDatasetCreate(datasetName string, publicNamespaces []stri
 	}
 	if err != nil {
 		pterm.Error.Println("Failed to create dataset in datahub: ", string(output))
-		return err
+		return output, err
 	}
-	return nil
+	return output, nil
 
 }
 
