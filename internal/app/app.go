@@ -376,16 +376,18 @@ func (app *App) executeOperations(manifest Manifest) error {
 					publicNamespace = ns.([]string)
 				}
 				if operation.Action == "add" {
-					err := app.Mim.MimDatasetCreate(operation.Config.Id, publicNamespace)
+					output, err := app.Mim.MimDatasetCreate(operation.Config.Id, publicNamespace)
 					if err != nil {
-						return err
+						if !strings.Contains(string(output), "Dataset already exist") {
+							return err
+						}
 					}
 				}
 				output, err := app.Mim.MimDatasetStore(operation.Config.Id, jsonContent)
 				if err != nil {
 					if strings.Contains(string(output), "dataset does not exist") {
 						// Create missing dataset and try again
-						err := app.Mim.MimDatasetCreate(operation.Config.Id, publicNamespace)
+						_, err := app.Mim.MimDatasetCreate(operation.Config.Id, publicNamespace)
 						if err != nil {
 							return err
 						}
@@ -419,7 +421,7 @@ func (app *App) executeOperations(manifest Manifest) error {
 					// Failed to get dataset. Proceeding to create on datahub.
 					pterm.Warning.Printf("Required dataset not available on datahub. Creating dataset '%s' for job '%s'.\n", sinkDataset, operation.Config.Title)
 
-					err := app.Mim.MimDatasetCreate(sinkDataset, publicNamespaces)
+					_, err := app.Mim.MimDatasetCreate(sinkDataset, publicNamespaces)
 					if err != nil {
 						return err
 					}
