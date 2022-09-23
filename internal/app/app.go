@@ -373,7 +373,9 @@ func (app *App) executeOperations(manifest Manifest) error {
 				ns, exist := operation.Config.JsonContent["publicNamespaces"]
 				var publicNamespace []string
 				if exist && len(ns.([]interface{})) > 0 {
-					publicNamespace = ns.([]string)
+					for _, value := range ns.([]interface{}) {
+						publicNamespace = append(publicNamespace, value.(string))
+					}
 				}
 				if operation.Action == "add" {
 					output, err := app.Mim.MimDatasetCreate(operation.Config.Id, publicNamespace)
