@@ -377,15 +377,24 @@ func (app *App) executeOperations(manifest Manifest) error {
 						publicNamespace = append(publicNamespace, value.(string))
 					}
 				}
-				if operation.Action == "add" {
-					output, err := app.Mim.MimDatasetCreate(operation.Config.Id, publicNamespace)
+
+				// Check if dataset already exist
+				_, err := app.Mim.MimDatasetGet(operation.Config.Id)
+				if err == nil {
+					// Already exist, we need to delete before creating again
+					err := app.Mim.MimDatasetDelete(operation.Config.Id)
 					if err != nil {
-						if !strings.Contains(string(output), "Dataset already exist") {
-							return err
-						}
+						return err
 					}
 				}
-				output, err := app.Mim.MimDatasetStore(operation.Config.Id, jsonContent)
+				output, err := app.Mim.MimDatasetCreate(operation.Config.Id, publicNamespace)
+				if err != nil {
+					if !strings.Contains(string(output), "Dataset already exist") {
+						return err
+					}
+				}
+
+				output, err = app.Mim.MimDatasetStore(operation.Config.Id, jsonContent)
 				if err != nil {
 					if strings.Contains(string(output), "dataset does not exist") {
 						// Create missing dataset and try again
