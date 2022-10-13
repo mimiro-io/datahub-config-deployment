@@ -1,7 +1,7 @@
 FROM golang:1.19.0
 
 # mim cli version
-ARG CLI_VERSION=0.6.0
+ARG CLI_VERSION=0.8.1
 
 # Install mim cli
 RUN curl -L https://github.com/mimiro-io/datahub-cli/releases/download/${CLI_VERSION}/datahub-cli_${CLI_VERSION}_Linux_x86_64.tar.gz -o cli.tar.gz
