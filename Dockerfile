@@ -1,7 +1,10 @@
 FROM golang:1.19.0
 
 # mim cli version
-ARG CLI_VERSION=0.8.2
+ARG CLI_VERSION=0.9.2
+
+# datahub-tslib version
+ARG TSLIB_VERSION=0.1.0
 
 # Install mim cli
 RUN curl -L https://github.com/mimiro-io/datahub-cli/releases/download/${CLI_VERSION}/datahub-cli_${CLI_VERSION}_Linux_x86_64.tar.gz -o cli.tar.gz
@@ -17,7 +20,7 @@ RUN curl -sL https://deb.nodesource.com/setup_18.x | bash
 RUN apt-get update && apt-get install -y nodejs
 RUN node --version
 RUN echo "{}">package.json
-RUN npm install mimiro-io/datahub-tslib --save-dev
+RUN npm install mimiro-io/datahub-tslib#${TSLIB_VERSION} --save-dev
 
 # Copy go mod and sum files
 COPY go.mod go.sum ./
