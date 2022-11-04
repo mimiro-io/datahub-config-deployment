@@ -181,7 +181,7 @@ func (app *App) doStuff(files []string, variables map[string]interface{}) error 
 		if fileType == "job" || fileType == "content" || fileType == "dataset" {
 
 			var transformDigest string
-			if hasTransform(jsonContent) {
+			if hasJSTransform(jsonContent) {
 				transformPath := jsonContent["transform"].(map[string]interface{})["Path"].(string)
 				transformFullPath := filepath.Join(app.Env.RootPath, "transforms", transformPath)
 				transformDigest, err = getTransformDigest(transformFullPath)
@@ -346,7 +346,7 @@ func (app *App) executeOperations(manifest Manifest) error {
 			} else {
 				// Will handle both add and update
 				transformFullPath := ""
-				if operation.HasTransform {
+				if operation.HasJSTransform {
 					transformPath := operation.Config.JsonContent["transform"].(map[string]interface{})["Path"].(string)
 					transformFullPath = filepath.Join(app.Env.RootPath, "transforms", transformPath)
 				}
