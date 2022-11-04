@@ -35,19 +35,22 @@ type config struct {
 }
 
 type operation struct {
-	Config       config `json:"config"`
-	ConfigPath   string `json:"configPath"`
-	Action       string `json:"action"`
-	HasTransform bool   `json:"hasTransform"`
+	Config         config `json:"config"`
+	ConfigPath     string `json:"configPath"`
+	Action         string `json:"action"`
+	HasJSTransform bool   `json:"hasJSTransform"`
 }
 
 func NewManifest(env *environment.Environment) *ManifestConfig {
 	return &ManifestConfig{Env: env}
 }
 
-func hasTransform(JsonContent map[string]interface{}) bool {
+func hasJSTransform(JsonContent map[string]interface{}) bool {
 	value, exist := JsonContent["transform"]
-	return exist && value != nil
+	if exist {
+		value = value.(map[string]interface{})["Type"].(string)
+	}
+	return exist && value == "JavascriptTransform"
 }
 
 func determineSinkDataset(jsonContent map[string]interface{}) string {
@@ -149,8 +152,8 @@ func diffManifest(previousManifest *Manifest, currentManifest Manifest) []operat
 	for key, config := range currentManifest.Manifest {
 		var action string
 		previous, exist := previousManifest.Manifest[key]
-		hasTransform := hasTransform(config.JsonContent)
-		if hasTransform {
+		hasJSTransform := hasJSTransform(config.JsonContent)
+		if hasJSTransform {
 			if config.TransformDigest != previous.TransformDigest {
 				action = "update"
 			}
@@ -163,10 +166,10 @@ func diffManifest(previousManifest *Manifest, currentManifest Manifest) []operat
 		}
 		if action == "add" || action == "update" {
 			op := operation{
-				Config:       config,
-				ConfigPath:   config.Path,
-				Action:       action,
-				HasTransform: hasTransform,
+				Config:         config,
+				ConfigPath:     config.Path,
+				Action:         action,
+				HasJSTransform: hasJSTransform,
 			}
 			operations = append(operations, op)
 		}
