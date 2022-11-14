@@ -1,7 +1,7 @@
 FROM golang:1.19.0
 
 # mim cli version
-ARG CLI_VERSION=0.9.2
+ARG CLI_VERSION=0.10.0
 
 # datahub-tslib version
 ARG TSLIB_VERSION=0.1.0
