@@ -20,6 +20,7 @@ RUN curl -sL https://deb.nodesource.com/setup_18.x | bash
 RUN apt-get update && apt-get install -y nodejs
 RUN node --version
 RUN echo "{}">package.json
+RUN npm config set update-notifier false
 RUN npm install mimiro-io/datahub-tslib#${TSLIB_VERSION} --save-dev
 
 # Copy go mod and sum files
