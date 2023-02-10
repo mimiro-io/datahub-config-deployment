@@ -66,7 +66,7 @@ func (env *Environment) GetConfigType(path string) string {
 	switch typeDir[0] {
 	case "jobs":
 		return "job"
-	case "contents":
+	case "contents", "content":
 		return "content"
 	case "transforms":
 		return "transform"
