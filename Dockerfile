@@ -1,4 +1,4 @@
-FROM golang:1.19.0
+FROM golang:1.20.3
 
 # mim cli version
 ARG CLI_VERSION=0.11.0
