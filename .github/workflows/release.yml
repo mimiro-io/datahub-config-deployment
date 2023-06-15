@@ -15,7 +15,7 @@ jobs:
 
       - name: Set github tag output
         id: vars
-        run: echo ::set-output name=tag::${GITHUB_REF#refs/*/}
+        run: echo "tag=${GITHUB_REF#refs/*/}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         id: buildx
