@@ -12,6 +12,7 @@ type Environment struct {
 	MimServer               string
 	Token                   string
 	RootPath                string
+	OutputPath              string
 	IgnorePath              []string
 	EnvironmentFile         string
 	DryRun                  bool

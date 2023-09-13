@@ -10,7 +10,6 @@ import (
 	"github.com/pterm/pterm"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -56,6 +55,7 @@ func NewApp(cmd *cobra.Command, args []string) (*App, error) {
 	}
 
 	path, _ := cmd.Flags().GetString("path")
+	outputPath, _ := cmd.Flags().GetString("output-path")
 	ignorePath, _ := cmd.Flags().GetStringArray("ignorePath")
 	env, _ := cmd.Flags().GetString("env")
 	err := verifyEnv(path, env)
@@ -73,6 +73,7 @@ func NewApp(cmd *cobra.Command, args []string) (*App, error) {
 		MimServer:               datahub,
 		Token:                   token,
 		RootPath:                path,
+		OutputPath:              outputPath,
 		IgnorePath:              ignorePath,
 		EnvironmentFile:         env,
 		DryRun:                  dryRun,
@@ -172,7 +173,8 @@ func (app *App) doStuff(files []string, variables map[string]interface{}) error 
 		}
 		jsonContent, err := utils.ReadJson(updatedJson)
 		if err != nil {
-			return err
+			pterm.Warning.Printf("Failed to parse json into map for file '%s'\n", files[i])
+			continue
 		}
 		fileType, exist := jsonContent["type"].(string)
 		if !exist {
@@ -296,11 +298,20 @@ func (app *App) executeOperations(manifest Manifest) error {
 		utils.LogPlain(message, app.Env.LogFormat)
 		app.Mim.CmdOutputs = append(app.Mim.CmdOutputs, message)
 	}
+
+	if app.Env.OutputPath != "" {
+		if err := os.MkdirAll(filepath.Join(app.Env.OutputPath, "datalayer_configs"), os.ModePerm); err != nil {
+			fmt.Println("Failed to create directory for datalayer configs")
+			return err
+		}
+	}
+
 	for _, operation := range operations {
 		tmpFileName := operation.Config.Id + ".json"
 		if operation.Config.Title != "" {
 			tmpFileName = operation.Config.Title + ".json"
 		}
+		tmpFilePath := filepath.Join(app.Env.OutputPath, tmpFileName)
 		jsonContent, err := json.Marshal(operation.Config.JsonContent)
 		if operation.Config.Type == "dataset" {
 			jsonContent, err = json.Marshal(operation.Config.JsonContent["entities"])
@@ -312,7 +323,7 @@ func (app *App) executeOperations(manifest Manifest) error {
 				return err
 			}
 			d1 := jsonContent
-			err = ioutil.WriteFile(tmpFileName, d1, 0644)
+			err = os.WriteFile(tmpFilePath, d1, 0644)
 			if err != nil {
 				fmt.Println("Failed to write config to temp file")
 				return err
@@ -321,11 +332,15 @@ func (app *App) executeOperations(manifest Manifest) error {
 
 		if operation.Config.Type == "content" {
 			var output []byte
-			var err error
+			var err, err2 error
 			if operation.Action == "delete" {
 				output, err = app.Mim.MimContentDelete(operation.Config.Id)
+				//err2 = os.WriteFile(filepath.Join(app.Env.OutputPath, "datalayer_configs", "deleted", tmpFileName), []byte(""), 0777) TODO: Fix deletion support
 			} else {
-				output, err = app.Mim.MimContentAdd(tmpFileName)
+				output, err = app.Mim.MimContentAdd(tmpFilePath)
+				if app.Env.OutputPath != "" {
+					err2 = os.WriteFile(filepath.Join(app.Env.OutputPath, "datalayer_configs", tmpFileName), jsonContent, 0777)
+				}
 			}
 			if err != nil {
 				errBody := utils.ErrorDetails{
@@ -336,6 +351,17 @@ func (app *App) executeOperations(manifest Manifest) error {
 				}
 				utils.LogError(errBody, app.Env.LogFormat)
 				return err
+			}
+
+			if err2 != nil {
+				errBody := utils.ErrorDetails{
+					File:    operation.ConfigPath,
+					Line:    0,
+					Col:     0,
+					Message: fmt.Sprintf("Failed to write config file to config directory"),
+				}
+				utils.LogError(errBody, app.Env.LogFormat)
+				return err2
 			}
 
 		} else if operation.Config.Type == "job" {
@@ -350,7 +376,7 @@ func (app *App) executeOperations(manifest Manifest) error {
 					transformPath := operation.Config.JsonContent["transform"].(map[string]interface{})["Path"].(string)
 					transformFullPath = filepath.Join(app.Env.RootPath, "transforms", transformPath)
 				}
-				output, err = app.Mim.MimJobAdd(tmpFileName, transformFullPath)
+				output, err = app.Mim.MimJobAdd(tmpFilePath, transformFullPath)
 			}
 			if err != nil {
 				errBody := utils.ErrorDetails{
@@ -414,7 +440,7 @@ func (app *App) executeOperations(manifest Manifest) error {
 		}
 		if operation.Action != "delete" {
 			// Remove temp file
-			err := os.Remove(tmpFileName)
+			err := os.Remove(tmpFilePath)
 			if err != nil {
 				pterm.Error.Println("Failed to remove tmp file for ", operation.Config.Id)
 				return err
