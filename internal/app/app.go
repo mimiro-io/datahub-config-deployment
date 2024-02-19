@@ -205,6 +205,9 @@ func (app *App) doStuff(files []string, variables map[string]interface{}) error 
 				return err
 			}
 			configType := app.Env.GetConfigType(files[i])
+			if configType == "unknown" {
+				continue
+			}
 			jsonId, exist := jsonContent["id"].(string)
 			if !exist {
 				jsonId = ""

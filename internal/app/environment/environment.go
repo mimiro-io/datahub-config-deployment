@@ -25,27 +25,35 @@ type Environment struct {
 
 func (env *Environment) GetConfigFiles() ([]string, error) {
 	pterm.Info.Printf("Reading files from %s\n", env.RootPath)
+	includedSubdirs := []string{"jobs", "job", "contents", "content", "transform", "transforms", "dataset", "datasets"}
 	var files []string
-	err := filepath.Walk(env.RootPath, func(path string, info os.FileInfo, err error) error {
+	for _, subPath := range includedSubdirs {
+		fullPath := filepath.Join(env.RootPath, subPath)
+		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+			continue
+		}
+		err := filepath.Walk(filepath.Join(env.RootPath, subPath), func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() && contains(env.IgnorePath, path) {
+				pterm.Info.Println("ignoring path ", path)
+				return filepath.SkipDir
+			}
+			if info.IsDir() {
+				return nil
+			}
+			//this check is too strict for transforms
+			if filepath.Ext(path) != ".json" {
+				return nil
+			}
+			files = append(files, path)
+			return nil
+		})
 		if err != nil {
-			return err
+			return nil, err
 		}
-		if info.IsDir() && contains(env.IgnorePath, path) {
-			pterm.Info.Println("ignoring path ", path)
-			return filepath.SkipDir
-		}
-		if info.IsDir() {
-			return nil
-		}
-		//this check is too strict for transforms
-		if filepath.Ext(path) != ".json" {
-			return nil
-		}
-		files = append(files, path)
-		return nil
-	})
-	if err != nil {
-		return nil, err
+
 	}
 	return files, nil
 }
