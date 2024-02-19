@@ -206,6 +206,7 @@ func (app *App) doStuff(files []string, variables map[string]interface{}) error 
 			}
 			configType := app.Env.GetConfigType(files[i])
 			if configType == "unknown" {
+				pterm.Warning.Printf("Unknown config type for %s. Skipping...\n", files[i])
 				continue
 			}
 			jsonId, exist := jsonContent["id"].(string)
