@@ -1,4 +1,4 @@
-FROM golang:1.24-alpine3.21
+FROM golang:1.27.4-alpine3.23
 
 # mim cli version
 ARG CLI_VERSION=0.20.1
@@ -17,8 +17,7 @@ WORKDIR /deploy
 
 # install node for typescript support
 RUN set -uex; \
-    apk update; \
-    apk add ca-certificates curl gnupg git; \
+    apk add --no-cache ca-certificates curl gnupg git; \
     mkdir -p /etc/apt/keyrings; \
     mkdir -p /etc/apt/sources.list.d/; \
     curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
@@ -26,8 +25,7 @@ RUN set -uex; \
     NODE_MAJOR=18; \
     echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" \
      > /etc/apt/sources.list.d/nodesource.list; \
-    apk update; \
-    apk add nodejs npm; \
+    apk add --no-cache nodejs npm; \
     node --version; \
     npm init -y; \
     ls -la; \
