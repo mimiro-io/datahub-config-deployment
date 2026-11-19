@@ -1,7 +1,7 @@
 FROM golang:1.27.4-alpine3.23
 
 # mim cli version
-ARG CLI_VERSION=0.20.1
+ARG CLI_VERSION=0.22.5
 
 # datahub-tslib version
 ARG TSLIB_VERSION=0.2.0
