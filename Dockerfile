@@ -17,7 +17,7 @@ WORKDIR /deploy
 
 # install node for typescript support
 RUN set -uex; \
-    apk add --no-cache ca-certificates curl gnupg git; \
+    apk add --no-cache bash ca-certificates curl gnupg git; \
     mkdir -p /etc/apt/keyrings; \
     mkdir -p /etc/apt/sources.list.d/; \
     curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
