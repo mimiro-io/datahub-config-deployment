@@ -4,7 +4,7 @@ FROM golang:1.27.4-alpine3.23
 ARG CLI_VERSION=0.22.5
 
 # datahub-tslib version
-ARG TSLIB_VERSION=0.2.0
+ARG TSLIB_VERSION=0.4.0
 
 # Install mim cli
 RUN wget https://github.com/mimiro-io/datahub-cli/releases/download/v${CLI_VERSION}/datahub-cli_${CLI_VERSION}_Linux_x86_64.tar.gz -O cli.tar.gz
